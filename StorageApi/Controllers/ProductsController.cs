@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StorageApi.Data;
+using StorageApi.DTO;
 using StorageApi.DTOs;
 using StorageApi.Models;
 
@@ -16,11 +17,21 @@ public class ProductsController : ControllerBase
         _context = context;
     }
 
-    // GET: api/Product
+    // GET: api/Products?category=Verktyg&name=skruv
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts()
+    public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts(
+        [FromQuery] string? category,
+        [FromQuery] string? name)
     {
-        return await _context.Product
+        var query = _context.Product.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(category))
+            query = query.Where(p => p.Category == category);
+
+        if (!string.IsNullOrWhiteSpace(name))
+            query = query.Where(p => p.Name.Contains(name));
+
+        return await query
             .Select(p => new ProductDto
             {
                 Id = p.Id,
@@ -32,7 +43,7 @@ public class ProductsController : ControllerBase
     }
 
     // GET: api/Product/5
-    [HttpGet("{id}")]
+    [HttpGet("{id:int}")]
     public async Task<ActionResult<ProductDto>> GetProduct(int id)
     {
         var product = await _context.Product.FindAsync(id);
@@ -44,6 +55,23 @@ public class ProductsController : ControllerBase
             Name = product.Name,
             Price = product.Price,
             Count = product.Count
+        };
+    }
+
+    // GET: api/Products/stats
+    [HttpGet("stats")]
+    public async Task<ActionResult<ProductStatsDto>> GetStats()
+    {
+        var products = _context.Product;
+
+        if (!await products.AnyAsync())
+            return new ProductStatsDto();
+
+        return new ProductStatsDto
+        {
+            TotalProducts = await products.CountAsync(),
+            TotalInventoryValue = await products.SumAsync(p => p.Price * p.Count),
+            AveragePrice = await products.AverageAsync(p => p.Price)
         };
     }
 
